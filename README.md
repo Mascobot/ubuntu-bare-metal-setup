@@ -1,6 +1,6 @@
 # Ubuntu Bare Metal Server Hardening
 
-One-shot script to harden a fresh Ubuntu server with a public IP. After running, the only way in is via Tailscale SSH. All public traffic is restricted to Cloudflare-proxied HTTPS.
+One-shot script to harden a fresh Ubuntu server with a public IP. After running, the only way in is via Tailscale SSH. All public traffic is restricted to Cloudflare-proxied HTTPS and two public API ports (8080/8081).
 
 ## Usage
 
@@ -19,6 +19,7 @@ You'll be prompted for an optional Tailscale auth key (recommended for physical/
 | SSH (22) | Tailscale interface only (`tailscale0`) |
 | HTTPS (443) | Cloudflare IPs only (v4 + v6) |
 | HTTP (80) | Closed by default, helper to enable with Cloudflare-only |
+| 8080, 8081 | Public (domain-fronted HTTP API services) |
 | DNS | Over TLS via Cloudflare (`1.1.1.1`) |
 | All other ports | Blocked (UFW default deny incoming) |
 
@@ -67,12 +68,13 @@ You'll be prompted for an optional Tailscale auth key (recommended for physical/
 | Tool | Purpose |
 |---|---|
 | Tailscale | VPN mesh for SSH access |
+| Docker | Container runtime (CE + Buildx + Compose) |
 | uv | Python package/project manager |
 | tmux, htop, btop | Session management, monitoring |
 
 ### Service User
 
-A locked non-root user `svc` is created for running applications (FastAPI, etc.). Switch to it with `su - svc`. Never run services as root.
+A locked non-root user `svc` is created for running applications (FastAPI, etc.). Added to the `docker` group. Switch to it with `su - svc`. Never run services as root.
 
 ## Helper Scripts
 
