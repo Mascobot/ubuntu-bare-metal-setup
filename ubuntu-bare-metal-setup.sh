@@ -88,7 +88,26 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # ============================================
-#  4. Secure /root/.ssh
+#  4. Install Docker
+# ============================================
+print_status "Installing Docker..."
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt-get update -qy
+apt-get install -qy docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+systemctl enable docker
+systemctl start docker
+
+# ============================================
+#  5. Secure /root/.ssh
 # ============================================
 print_status "Securing SSH directory..."
 mkdir -p /root/.ssh
@@ -101,7 +120,7 @@ EOF
 chmod 600 /root/.ssh/config
 
 # ============================================
-#  5. Harden SSH Daemon
+#  6. Harden SSH Daemon
 # ============================================
 print_status "Hardening SSH..."
 SSH_CONFIG="/etc/ssh/sshd_config"
@@ -134,7 +153,7 @@ EOF
 systemctl reload ssh || systemctl restart ssh
 
 # ============================================
-#  6. Firewall (UFW) — Maximum Lockdown
+#  7. Firewall (UFW) — Maximum Lockdown
 # ============================================
 print_status "Configuring firewall..."
 ufw --force reset
@@ -143,6 +162,10 @@ ufw default allow outgoing
 
 # SSH: Tailscale interface only
 ufw allow in on tailscale0 to any port 22 proto tcp comment 'SSH via Tailscale only'
+
+# HTTP API (public — fronted by domain names)
+ufw allow 8080/tcp comment 'HTTP API public'
+ufw allow 8081/tcp comment 'HTTP API public'
 
 # HTTPS (443): Cloudflare IPv4 ranges only
 for cidr in \
@@ -179,7 +202,7 @@ done
 ufw --force enable
 
 # ============================================
-#  7. Fail2Ban
+#  8. Fail2Ban
 # ============================================
 print_status "Configuring Fail2Ban..."
 systemctl enable fail2ban
@@ -203,7 +226,7 @@ EOF
 systemctl restart fail2ban
 
 # ============================================
-#  8. Automatic Security Updates
+#  9. Automatic Security Updates
 # ============================================
 print_status "Configuring automatic security updates..."
 cat << 'EOF' > /etc/apt/apt.conf.d/51unattended-upgrades-local
@@ -214,7 +237,7 @@ EOF
 systemctl enable unattended-upgrades
 
 # ============================================
-#  9. Kernel Hardening (sysctl)
+# 10. Kernel Hardening (sysctl)
 # ============================================
 print_status "Applying kernel hardening..."
 cat << 'EOF' > /etc/sysctl.d/99-hardening.conf
@@ -262,7 +285,7 @@ EOF
 sysctl --system
 
 # ============================================
-# 10. Secure Shared Memory
+# 11. Secure Shared Memory
 # ============================================
 print_status "Securing shared memory..."
 if ! grep -q '/run/shm' /etc/fstab; then
@@ -270,7 +293,7 @@ if ! grep -q '/run/shm' /etc/fstab; then
 fi
 
 # ============================================
-# 11. Disable Core Dumps
+# 12. Disable Core Dumps
 # ============================================
 print_status "Disabling core dumps..."
 cat << 'EOF' > /etc/security/limits.d/no-core-dumps.conf
@@ -279,14 +302,14 @@ cat << 'EOF' > /etc/security/limits.d/no-core-dumps.conf
 EOF
 
 # ============================================
-# 12. AppArmor
+# 13. AppArmor
 # ============================================
 print_status "Enforcing AppArmor profiles..."
 systemctl enable apparmor
 aa-enforce /etc/apparmor.d/* 2>/dev/null || true
 
 # ============================================
-# 13. Auditd (system call auditing)
+# 14. Auditd (system call auditing)
 # ============================================
 print_status "Configuring audit logging..."
 systemctl enable auditd
@@ -312,7 +335,7 @@ EOF
 systemctl restart auditd
 
 # ============================================
-# 14. Disable Unused Kernel Modules
+# 15. Disable Unused Kernel Modules
 # ============================================
 print_status "Disabling unused kernel modules..."
 cat << 'EOF' > /etc/modprobe.d/hardening.conf
@@ -331,14 +354,14 @@ install usb-storage /bin/true
 EOF
 
 # ============================================
-# 15. Rootkit Detection
+# 16. Rootkit Detection
 # ============================================
 print_status "Initializing rootkit detection baseline..."
 rkhunter --update 2>/dev/null || true
 rkhunter --propupd 2>/dev/null || true
 
 # ============================================
-# 16. Login Banner
+# 17. Login Banner
 # ============================================
 cat << 'EOF' > /etc/issue.net
 *******************************************************************
@@ -349,12 +372,12 @@ cat << 'EOF' > /etc/issue.net
 EOF
 
 # ============================================
-# 17. Restrictive Default Umask
+# 18. Restrictive Default Umask
 # ============================================
 sed -i 's/^UMASK.*/UMASK 027/' /etc/login.defs 2>/dev/null || true
 
 # ============================================
-# 18. Non-Root Service User
+# 19. Non-Root Service User
 # ============================================
 SVC_USER="svc"
 print_status "Creating non-root service user '$SVC_USER'..."
@@ -365,9 +388,10 @@ if ! id "$SVC_USER" &>/dev/null; then
   chmod 700 /home/$SVC_USER/.ssh
   chown -R $SVC_USER:$SVC_USER /home/$SVC_USER/.ssh
 fi
+usermod -aG docker "$SVC_USER"
 
 # ============================================
-# 19. AIDE (File Integrity Monitoring)
+# 20. AIDE (File Integrity Monitoring)
 # ============================================
 print_status "Initializing AIDE file integrity database..."
 if [[ -f /usr/sbin/aideinit ]]; then
@@ -387,7 +411,7 @@ EOF
 chmod 700 /etc/cron.daily/aide-check
 
 # ============================================
-# 20. SUID/SGID Binary Audit
+# 21. SUID/SGID Binary Audit
 # ============================================
 print_status "Auditing and stripping unnecessary SUID/SGID bits..."
 mkdir -p /var/log/hardening
@@ -411,7 +435,7 @@ find / -xdev \( -perm -4000 -o -perm -2000 \) -type f 2>/dev/null \
   > /var/log/hardening/suid-sgid-after.txt
 
 # ============================================
-# 21. Restrict Cron & At
+# 22. Restrict Cron & At
 # ============================================
 print_status "Restricting cron and at to root only..."
 echo "root" > /etc/cron.allow
@@ -420,7 +444,7 @@ chmod 600 /etc/cron.allow /etc/at.allow
 rm -f /etc/cron.deny /etc/at.deny
 
 # ============================================
-# 22. DNS over TLS (systemd-resolved)
+# 23. DNS over TLS (systemd-resolved)
 # ============================================
 print_status "Configuring DNS over TLS..."
 mkdir -p /etc/systemd/resolved.conf.d
@@ -434,7 +458,7 @@ EOF
 systemctl restart systemd-resolved 2>/dev/null || true
 
 # ============================================
-# 23. Lynis Security Audit (baseline)
+# 24. Lynis Security Audit (baseline)
 # ============================================
 print_status "Running Lynis security audit (baseline)..."
 mkdir -p /var/log/lynis
@@ -443,7 +467,7 @@ LYNIS_SCORE=$(grep 'Hardening index' /var/log/lynis/baseline-*.log 2>/dev/null |
 print_status "Lynis baseline: $LYNIS_SCORE"
 
 # ============================================
-# 24. Helper: Enable Port 80 (Cloudflare Only)
+# 25. Helper: Enable Port 80 (Cloudflare Only)
 # ============================================
 cat << 'SCRIPT' > /usr/local/sbin/enable-http-cloudflare.sh
 #!/usr/bin/env bash
@@ -467,7 +491,7 @@ SCRIPT
 chmod 700 /usr/local/sbin/enable-http-cloudflare.sh
 
 # ============================================
-# 25. Helper: Update Cloudflare IPs
+# 26. Helper: Update Cloudflare IPs
 # ============================================
 cat << 'SCRIPT' > /usr/local/sbin/update-cloudflare-ips.sh
 #!/usr/bin/env bash
@@ -520,6 +544,7 @@ echo "=============================================="
 echo ""
 echo "NETWORK:"
 echo "  SSH:         Port 22 — Tailscale only (tailscale0 interface)"
+echo "  Ports 8080-8081: Public (HTTP API, domain-fronted)"
 echo "  Tailscale:   $TAILSCALE_IP"
 echo "  HTTPS 443:   Cloudflare IPs only"
 echo "  DNS:         Over TLS via Cloudflare (1.1.1.1)"
@@ -543,9 +568,11 @@ echo "SERVICE USER:"
 echo "  User:        $SVC_USER (run FastAPI and other apps as this user)"
 echo "  Switch:      su - $SVC_USER"
 echo "  Home:        /home/$SVC_USER"
+echo "  Docker:      $SVC_USER added to docker group"
 echo ""
 echo "TOOLS:"
 echo "  uv:          $HOME/.local/bin/uv"
+echo "  Docker:      $(docker --version 2>/dev/null || echo 'installed')"
 echo ""
 echo -e "${YELLOW}IMPORTANT — READ THIS:${NC}"
 echo "  SSH is now ONLY accessible via Tailscale."
