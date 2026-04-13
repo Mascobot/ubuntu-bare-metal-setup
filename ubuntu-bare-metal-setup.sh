@@ -218,7 +218,7 @@ enabled  = true
 port     = 22
 filter   = sshd
 logpath  = /var/log/auth.log
-maxretry = 3
+maxretry = 5
 bantime  = 24h
 findtime = 10m
 EOF
@@ -551,7 +551,7 @@ echo "  DNS:         Over TLS via Cloudflare (1.1.1.1)"
 echo "  Everything:  Blocked by default"
 echo ""
 echo "SECURITY:"
-echo "  Fail2Ban:    24h ban after 3 failed SSH attempts"
+echo "  Fail2Ban:    24h ban after 5 failed SSH attempts"
 echo "  AppArmor:    Enforced"
 echo "  Auditd:      Monitoring auth, SSH keys, config files"
 echo "  AIDE:        File integrity monitoring (daily cron check)"

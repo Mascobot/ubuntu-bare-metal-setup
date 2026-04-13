@@ -30,7 +30,7 @@ You'll be prompted for an optional Tailscale auth key (recommended for physical/
 | SSH auth | Key-only, no passwords, no empty passwords |
 | SSH crypto | chacha20-poly1305, aes256-gcm; curve25519 kex |
 | SSH limits | 3 max attempts, 20s login grace, no forwarding |
-| Fail2Ban | 24h ban after 3 failed SSH attempts |
+| Fail2Ban | 24h ban after 5 failed SSH attempts |
 | Login banner | Legal warning on connect |
 | Root login | Key-only (`prohibit-password`) |
 
